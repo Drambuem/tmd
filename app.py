@@ -7,7 +7,6 @@ st.set_page_config(page_title="Logistics Planner PRO", layout="wide")
 # --- ΔΕΔΟΜΕΝΑ ΔΡΟΜΟΛΟΓΙΩΝ ---
 # 0:Δευ, 1:Τρι, 2:Τετ, 3:Πεμ, 4:Παρ, 5:Σαβ, 6:Κυρ
 
-# Ορίζουμε όλες τις απευθείας συνδέσεις
 RAW_ROUTES = [
     # ΑΠΟ ΑΘΗΝΑ
     {"from": "ΑΘΗΝΑ", "to": ["ΑΥΛΩΝΑΣ", "ΕΛΑΙΩΝΑΣ", "ΛΑΜΙΑ", "ΚΑΣΣΑΒΕΤΕΙΑ", "ΛΑΡΙΣΑ", "ΚΑΤΕΡΙΝΗ", "ΘΕΣΣΑΛΟΝΙΚΗ"], "days": [0, 3], "transit": 1},
@@ -48,7 +47,7 @@ RAW_ROUTES = [
     {"from": "ΓΡΕΒΕΝΑ", "to": ["ΤΡΙΚΑΛΑ", "ΛΑΜΙΑ", "ΕΛΑΙΩΝΑΣ", "ΑΥΛΩΝΑ", "ΑΘΗΝΑ"], "days": [3], "transit": 1},
 ]
 
-# Μετατροπή των RAW_ROUTES σε απλή λίστα συνδέσεων
+# Προετοιμασία λίστας ROUTES
 ROUTES = []
 for r in RAW_ROUTES:
     for target in r["to"]:
@@ -65,20 +64,19 @@ def greek_day(date):
     days = ["Δευτέρα", "Τρίτη", "Τετάρτη", "Πέμπτη", "Παρασκευή", "Σάββατο", "Κυριακή"]
     return days[date.weekday()]
 
-# --- ΜΗΧΑΝΗ ΑΝΑΖΗΤΗΣΗΣ (Recursive Backwards Search) ---
-def find_best_path(current_city, target_city, deadline_date, path_so_far, depth=0):
-    if depth > 3: # Μέγιστο 3 ανταποκρίσεις
+# --- ΜΗΧΑΝΗ ΑΝΑΖΗΤΗΣΗΣ ---
+def find_best_path(current_city, target_city, deadline_date, depth=0):
+    if depth > 3: 
         return None
     
     best_full_path = None
     
-    # Ψάχνουμε όλες τις συνδέσεις που καταλήγουν στον προορισμό
+    # Επιθυμητή άφιξη στον ΤΕΛΙΚΟ προορισμό: 1 μέρα πριν το deadline
+    latest_arrival = deadline_date - timedelta(days=1)
+    
     for r in ROUTES:
         if r["to"] == target_city:
-            # Πότε πρέπει να φτάσει; (Το αργότερο 1 μέρα πριν το deadline)
-            latest_arrival = deadline_date - timedelta(days=1)
-            
-            # Πότε φεύγει το δρομολόγιο;
+            # Υπολογισμός αναχώρησης γι' αυτό το σκέλος
             ship_date = latest_arrival - timedelta(days=r["transit"])
             while ship_date.weekday() not in r["days"]:
                 ship_date -= timedelta(days=1)
@@ -93,12 +91,13 @@ def find_best_path(current_city, target_city, deadline_date, path_so_far, depth=
             }
             
             if r["from"] == current_city:
-                # Βρήκαμε απευθείας!
                 return [current_leg]
             else:
-                # Ψάχνουμε πώς θα πάμε στην αφετηρία αυτού του σκέλους (r["from"])
-                # Πρέπει να φτάσουμε εκεί πριν το ship_date του τρέχοντος σκέλους
-                sub_path = find_best_path(current_city, r["from"], ship_date + timedelta(days=1), path_so_far, depth + 1)
+                # ΕΔΩ Η ΔΙΟΡΘΩΣΗ:
+                # Ζητάμε το προηγούμενο σκέλος να έχει φτάσει ΠΡΙΝ την ημέρα αναχώρησης (ship_date)
+                # Άρα το deadline του προηγούμενου σκέλους είναι η ίδια η ημέρα αναχώρησης.
+                # Έτσι, η "άφιξη" του προηγούμενου θα είναι τουλάχιστον ship_date - 1.
+                sub_path = find_best_path(current_city, r["from"], ship_date, depth + 1)
                 
                 if sub_path:
                     full_path = sub_path + [current_leg]
@@ -107,40 +106,30 @@ def find_best_path(current_city, target_city, deadline_date, path_so_far, depth=
                         
     return best_full_path
 
-# --- INTERFACE ---
-st.title("🚛 Σύστημα Δρομολογίων PRO")
-st.write("Το σύστημα υπολογίζει αυτόματα όλες τις ενδιάμεσες ανταποκρίσεις.")
+# --- UI ---
+st.title("🚛 Σύστημα Δρομολογίων PRO (v1.1)")
+st.write("Κανόνας: Οι ανταποκρίσεις απαιτούν τουλάχιστον 1 ημέρα αναμονής στον κόμβο.")
 
 c1, c2, c3 = st.columns(3)
 with c1:
-    start_city = st.selectbox("Αφετηρία (Πού είναι το δέμα;)", ALL_CITIES, index=ALL_CITIES.index("ΑΘΗΝΑ"))
+    start_city = st.selectbox("Αφετηρία:", ALL_CITIES, index=ALL_CITIES.index("ΣΕΡΡΕΣ"))
 with c2:
-    end_city = st.selectbox("Προορισμός (Πού πάει;)", ALL_CITIES, index=ALL_CITIES.index("ΘΕΣΣΑΛΟΝΙΚΗ"))
+    end_city = st.selectbox("Προορισμός:", ALL_CITIES, index=ALL_CITIES.index("ΑΘΗΝΑ"))
 with c3:
-    target_date = st.date_input("Ημερομηνία Παράδοσης στον Πελάτη:", datetime.now() + timedelta(days=4))
+    target_date = st.date_input("Ημερομηνία Παράδοσης:", datetime.now() + timedelta(days=5))
 
-if st.button("🔍 Υπολογισμός Διαδρομής"):
-    if start_city == end_city:
-        st.error("Η αφετηρία και ο προορισμός συμπίπτουν.")
-    else:
-        result_path = find_best_path(start_city, end_city, target_date, [])
+if st.button("🔍 Υπολογισμός"):
+    result_path = find_best_path(start_city, end_city, target_date)
+    
+    if result_path:
+        st.success(f"### Αναχώρηση: {result_path[0]['ship'].strftime('%d/%m/%Y')} ({greek_day(result_path[0]['ship'])})")
         
-        if result_path:
-            st.success(f"### Πρέπει να ξεκινήσει: {result_path[0]['ship'].strftime('%d/%m/%Y')} ({greek_day(result_path[0]['ship'])})")
-            
-            for i, leg in enumerate(result_path):
-                with st.expander(f"Σκέλος {i+1}: {leg['from']} ➡️ {leg['to']}", expanded=True):
-                    col_a, col_b = st.columns(2)
-                    col_a.metric("Αναχώρηση", f"{leg['ship'].strftime('%d/%m/%Y')}", greek_day(leg['ship']))
-                    col_b.metric("Άφιξη", f"{leg['arrive'].strftime('%d/%m/%Y')}", greek_day(leg['arrive']))
-            
-            st.info(f"📦 **Τελική Παράδοση:** {target_date.strftime('%d/%m/%Y')} ({greek_day(target_date)})")
-        else:
-            st.error("Δεν βρέθηκε διαδρομή. Πιθανές αιτίες:\n1. Δεν υπάρχει σύνδεση των πόλεων.\n2. Δεν προλαβαίνουν οι ανταποκρίσεις.\n3. Η ημερομηνία είναι πολύ κοντινή.")
-
-st.sidebar.info("""
-**Πώς λειτουργεί:**
-1. Βρίσκει την τελευταία ημέρα που μπορεί να παραδοθεί το δέμα.
-2. Ψάχνει προς τα πίσω όλα τα διαθέσιμα δρομολόγια.
-3. Αν χρειάζεται αλλαγή φορτηγού (π.χ. στη Λαμία ή τη Θεσσαλονίκη), υπολογίζει το χρόνο αναμονής.
-""")
+        for i, leg in enumerate(result_path):
+            with st.expander(f"Σκέλος {i+1}: {leg['from']} ➡️ {leg['to']}", expanded=True):
+                col_a, col_b = st.columns(2)
+                col_a.metric("Αναχώρηση", leg['ship'].strftime('%d/%m/%Y'), greek_day(leg['ship']))
+                col_b.metric("Άφιξη", leg['arrive'].strftime('%d/%m/%Y'), greek_day(leg['arrive']))
+        
+        st.info(f"📦 **Τελική Παράδοση στον Πελάτη:** {target_date.strftime('%d/%m/%Y')}")
+    else:
+        st.error("Δεν βρέθηκε διαδρομή που να ικανοποιεί τους χρονικούς περιορισμούς.")

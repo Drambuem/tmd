@@ -1,7 +1,7 @@
 import streamlit as st
 from datetime import datetime, timedelta
 
-st.set_page_config(page_title="Logistics Planner PRO v1.6", layout="wide")
+st.set_page_config(page_title="Logistics Planner PRO v1.7", layout="wide")
 
 # --- ΔΕΔΟΜΕΝΑ ΔΡΟΜΟΛΟΓΙΩΝ ---
 RAW_ROUTES = [
@@ -30,7 +30,8 @@ RAW_ROUTES = [
 
     # ΑΠΟ ΣΕΡΡΕΣ
     {"from": "ΣΕΡΡΕΣ", "to": ["ΘΕΣΣΑΛΟΝΙΚΗ"], "days": [0, 1], "transit": 0},
-    
+    {"from": "ΘΕΣΣΑΛΟΝΙΚΗ", "to": ["ΣΕΡΡΕΣ"], "days": [0, 1], "transit": 0},
+
     # ΑΠΟ ΙΩΑΝΝΙΝΑ / ΠΑΤΡΑ / ΑΛΛΑ
     {"from": "ΙΩΑΝΝΙΝΑ", "to": ["ΑΡΤΑ", "ΑΓΡΙΝΙΟ", "ΠΑΤΡΑ", "ΑΙΓΙΟ", "ΚΟΡΙΝΘΟΣ", "ΑΘΗΝΑ"], "days": [1], "transit": 0},
     {"from": "ΠΑΤΡΑ", "to": ["ΑΙΓΙΟ", "ΞΥΛΟΚΑΣΤΡΟ", "ΚΙΑΤΟ", "ΚΟΡΙΝΘΟΣ", "ΑΘΗΝΑ"], "days": [0], "transit": 0},
@@ -57,7 +58,7 @@ def greek_day(date):
     days = ["Δευτέρα", "Τρίτη", "Τετάρτη", "Πέμπτη", "Παρασκευή", "Σάββατο", "Κυριακή"]
     return days[date.weekday()]
 
-# --- ΜΗΧΑΝΗ BACKWARD (ΓΙΑ ΑΝΑΧΩΡΗΣΗ) ---
+# --- ΜΗΧΑΝΗ BACKWARD (ΑΝΑΧΩΡΗΣΗ) ---
 def find_backward_path(start, end, deadline, depth=0):
     if depth > 4: return None
     target_arrival = deadline - timedelta(days=1)
@@ -66,7 +67,6 @@ def find_backward_path(start, end, deadline, depth=0):
     for r in ROUTES:
         if r["to"] == end:
             ship = target_arrival - timedelta(days=r["transit"])
-            # Πηγαίνουμε πίσω μέχρι να βρούμε μέρα δρομολογίου
             tries = 0
             while ship.weekday() not in r["days"] and tries < 14:
                 ship -= timedelta(days=1)
@@ -78,17 +78,15 @@ def find_backward_path(start, end, deadline, depth=0):
             if r["from"] == start:
                 path = [current_leg]
             else:
-                # Ανταπόκριση: Πρέπει να έχει φτάσει τουλάχιστον 1 μέρα ΠΡΙΝ το ship
-                path_prefix = find_backward_path(start, r["from"], ship, depth + 1)
-                path = path_prefix + [current_leg] if path_prefix else None
+                sub_path = find_backward_path(start, r["from"], ship, depth + 1)
+                path = sub_path + [current_leg] if sub_path else None
             
             if path:
-                # Επιλέγουμε τη διαδρομή που ξεκινάει όσο το δυνατόν αργότερα
                 if best_path is None or path[0]["ship"] > best_path[0]["ship"]:
                     best_path = path
     return best_path
 
-# --- ΜΗΧΑΝΗ FORWARD (ΓΙΑ ΕΠΙΣΤΡΟΦΗ) ---
+# --- ΜΗΧΑΝΗ FORWARD (ΕΠΙΣΤΡΟΦΗ) ---
 def find_forward_path(start, end, start_date, depth=0):
     if depth > 4: return None
     best_path = None
@@ -107,9 +105,8 @@ def find_forward_path(start, end, start_date, depth=0):
             if r["to"] == end:
                 path = [current_leg]
             else:
-                # Ανταπόκριση: Φεύγει τουλάχιστον 1 μέρα ΜΕΤΑ την άφιξη
-                path_suffix = find_forward_path(r["to"], end, arrive + timedelta(days=1), depth + 1)
-                path = [current_leg] + path_suffix if path_suffix else None
+                sub_path = find_forward_path(r["to"], end, arrive + timedelta(days=1), depth + 1)
+                path = [current_leg] + sub_path if sub_path else None
             
             if path:
                 if best_path is None or path[-1]["arrive"] < best_path[-1]["arrive"]:
@@ -117,19 +114,17 @@ def find_forward_path(start, end, start_date, depth=0):
     return best_path
 
 # --- UI ---
-st.title("🚛 Logistics Planner PRO v1.6")
+st.title("🚛 Logistics Planner PRO v1.7")
 
 col1, col2, col3 = st.columns(3)
 with col1:
-    # ΠΡΟΕΠΙΛΟΓΗ: ΣΕΡΡΕΣ
-    default_origin = "ΣΕΡΡΕΣ" if "ΣΕΡΡΕΣ" in ALL_CITIES else ALL_CITIES[0]
-    origin = st.selectbox("Από (Αφετηρία):", ALL_CITIES, index=ALL_CITIES.index(default_origin))
+    def_origin = "ΣΕΡΡΕΣ" if "ΣΕΡΡΕΣ" in ALL_CITIES else ALL_CITIES[0]
+    origin = st.selectbox("Από (Αφετηρία):", ALL_CITIES, index=ALL_CITIES.index(def_origin))
 with col2:
-    # ΠΡΟΕΠΙΛΟΓΗ: ΑΘΗΝΑ
-    default_dest = "ΑΘΗΝΑ" if "ΑΘΗΝΑ" in ALL_CITIES else ALL_CITIES[0]
-    dest = st.selectbox("Προς (Προορισμός):", ALL_CITIES, index=ALL_CITIES.index(default_dest))
+    def_dest = "ΑΘΗΝΑ" if "ΑΘΗΝΑ" in ALL_CITIES else ALL_CITIES[0]
+    dest = st.selectbox("Προς (Προορισμός):", ALL_CITIES, index=ALL_CITIES.index(def_dest))
 with col3:
-    d_date = st.date_input("Ημερομηνία Παράδοσης στον Πελάτη:", datetime.now() + timedelta(days=5))
+    d_date = st.date_input("Ημερομηνία Παράδοσης:", datetime.now() + timedelta(days=5))
 
 if st.button("🔍 Υπολογισμός Διαδρομής"):
     res = find_backward_path(origin.upper(), dest.upper(), d_date)
@@ -139,16 +134,14 @@ if st.button("🔍 Υπολογισμός Διαδρομής"):
         st.session_state['last_origin'] = origin
         st.session_state['last_delivery'] = d_date
         
-        st.success(f"### Αναχώρηση από {origin}: {res[0]['ship'].strftime('%d/%m/%Y')} ({greek_day(res[0]['ship'])})")
+        st.success(f"### Αναχώρηση: {res[0]['ship'].strftime('%d/%m/%Y')} ({greek_day(res[0]['ship'])})")
         for i, leg in enumerate(res):
             with st.expander(f"Σκέλος {i+1}: {leg['from']} ➡️ {leg['to']}", expanded=True):
                 c_a, c_b = st.columns(2)
-                c_a.write(f"**Αναχώρηση:** {leg['ship'].strftime('%d/%m/%Y')} ({greek_day(leg['ship'])})")
-                c_b.write(f"**Άφιξη:** {leg['arrive'].strftime('%d/%m/%Y')} ({greek_day(leg['arrive'])})")
-        
-        st.warning(f"📦 **Άφιξη στον τελικό προορισμό:** {res[-1]['arrive'].strftime('%d/%m/%Y')} | **Παράδοση:** {d_date.strftime('%d/%m/%Y')}")
+                c_a.write(f"**Αναχώρηση:** {leg['ship'].strftime('%d/%m/%Y')}")
+                c_b.write(f"**Άφιξη:** {leg['arrive'].strftime('%d/%m/%Y')}")
     else:
-        st.error("Δεν βρέθηκε διαδρομή. Δοκιμάστε μια μεταγενέστερη ημερομηνία παράδοσης.")
+        st.error("Δεν βρέθηκε διαδρομή.")
 
 if 'last_res' in st.session_state:
     st.write("---")
@@ -157,4 +150,9 @@ if 'last_res' in st.session_state:
         ret_res = find_forward_path(st.session_state['last_dest'].upper(), st.session_state['last_origin'].upper(), ret_start)
         
         if ret_res:
-            st.success(f"### Επιστροφή στην έδρα ({st.session_state['last_origin']}): {ret_res[-1]['arr
+            arr_date = ret_res[-1]['arrive'].strftime('%d/%m/%Y')
+            st.success(f"### Επιστροφή στην έδρα: {arr_date}")
+            for i, leg in enumerate(ret_res):
+                st.info(f"Σκέλος {i+1}: {leg['from']} -> {leg['to']} | Αναχώρηση: {leg['ship'].strftime('%d/%m/%Y')} | Άφιξη: {leg['arrive'].strftime('%d/%m/%Y')}")
+        else:
+            st.error("Δεν βρέθηκε διαδρομή επιστροφής.")

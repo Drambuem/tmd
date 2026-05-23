@@ -4,44 +4,46 @@ from datetime import datetime, timedelta
 # 1. Βασική Ρύθμιση
 st.set_page_config(page_title="Μεταγωγές", page_icon="🚌", layout="wide")
 
-# 2. ΕΠΙΒΟΛΗ ΣΚΟΥΡΟΥ ΓΚΡΙ ΦΟΝΤΟΥ & CSS
+# 2. ΕΠΙΒΟΛΗ ΣΧΕΔΟΝ ΜΑΥΡΟΥ ΦΟΝΤΟΥ & CSS
 st.markdown("""
     <style>
-    /* 1. Επιβολή Σκούρου Γκρι Φόντου (Cement Gray) */
+    /* 1. Σχεδόν μαύρο φόντο σε όλη την εφαρμογή */
     html, body, .stApp, [data-testid="stAppViewContainer"], [data-testid="stMainViewContainer"] {
-        background-color: #adb5bd !important;
+        background-color: #121212 !important;
     }
 
-    /* 2. Τίτλος Μεταγωγές */
+    /* 2. Τίτλος Μεταγωγές (Λευκό/Γαλάζιο για να ξεχωρίζει στο μαύρο) */
     .main-title {
-        color: #002b5c;
+        color: #ffffff;
         text-align: center;
         font-family: 'Arial Black', sans-serif;
         font-size: 50px !important;
         font-weight: bold;
         margin-top: -40px;
         padding-bottom: 20px;
+        text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
     }
 
-    /* 3. Κομψό "by Manos" (Μειωμένο μέγεθος) */
+    /* 3. by Manos - Λευκό κείμενο κάτω αριστερά */
     .manos-footer {
         position: fixed;
         bottom: 20px;
         left: 20px;
         font-size: 22px !important; 
-        color: #000000 !important;
+        color: #ffffff !important;
         font-weight: 800 !important;
         font-family: sans-serif;
         z-index: 9999;
+        opacity: 0.8;
     }
 
-    /* 4. Κάρτες Αποτελεσμάτων */
+    /* 4. Κάρτες Αποτελεσμάτων (Λευκές για μέγιστη αντίθεση) */
     .route-card {
         background-color: #ffffff !important;
         padding: 25px !important;
         border-radius: 15px !important;
-        border: 3px solid #004a99 !important;
-        box-shadow: 5px 5px 15px rgba(0,0,0,0.3) !important;
+        border-left: 15px solid #007bff !important;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.5) !important;
         margin-bottom: 20px !important;
         color: #000000 !important;
     }
@@ -50,52 +52,57 @@ st.markdown("""
         background-color: #ffffff !important;
         padding: 25px !important;
         border-radius: 15px !important;
-        border: 3px solid #e67e22 !important;
-        box-shadow: 5px 5px 15px rgba(0,0,0,0.3) !important;
+        border-left: 15px solid #ff8c00 !important;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.5) !important;
         margin-bottom: 20px !important;
         color: #000000 !important;
     }
 
-    .label-blue { color: #004a99; font-weight: bold; font-size: 1.2em; }
-    .date-red { color: #c0392b; font-weight: bold; font-size: 1.2em; }
+    /* Ρυθμίσεις για τα labels των επιλογών (να φαίνονται στο μαύρο) */
+    .stSelectbox label, .stDateInput label {
+        color: #ffffff !important;
+        font-weight: bold !important;
+    }
+
+    .label-blue { color: #0056b3; font-weight: bold; font-size: 1.2em; }
+    .date-red { color: #d32f2f; font-weight: bold; font-size: 1.2em; }
     
     /* Εμφάνιση των τριών τελειών */
     [data-testid="stHeader"] {
         background-color: rgba(0,0,0,0) !important;
     }
     </style>
+    <div class="main-title">Μεταγωγές</div>
     """, unsafe_allow_html=True)
 
-# --- ΔΕΔΟΜΕΝΑ ΔΡΟΜΟΛΟΓΙΩΝ (Π.Δ. Άρθρα 10-23) ---
+# --- ΔΕΔΟΜΕΝΑ ΔΡΟΜΟΛΟΓΙΩΝ (Π.Δ.) ---
 RAW_ROUTES = [
     {"from": "ΑΘΗΝΑ", "to": ["ΑΥΛΩΝΑΣ", "ΕΛΑΙΩΝΑΣ", "ΛΑΜΙΑ", "ΚΑΣΣΑΒΕΤΕΙΑ", "ΛΑΡΙΣΑ", "ΚΑΤΕΡΙΝΗ", "ΘΕΣΣΑΛΟΝΙΚΗ"], "days": [0, 3], "transit": 0},
     {"from": "ΑΘΗΝΑ", "to": ["ΚΟΡΙΝΘΟΣ", "ΝΑΥΠΛΙΟ", "ΤΥΡΙΝΘΑ", "ΤΡΙΠΟΛΗ", "ΚΑΛΑΜΑΤΑ"], "days": [2], "transit": 0},
     {"from": "ΑΘΗΝΑ", "to": ["ΤΡΙΚΑΛΑ", "ΓΡΕΒΕΝΑ"], "days": [0], "transit": 0},
-    {"from": "ΑΘΗΝΑ", "to": ["ΧΑΝΙΑ", "ΗΡΑΚΛΕΙΟ", "ΡΟΔΟΣ", "ΚΕΡΚΥΡΑ", "ΡΟΔΟΣ", "ΣΥΡΟΣ", "ΧΙΟΣ", "ΣΑΜΟΣ", "ΜΥΤΙΛΗΝΗ"], "days": [4], "transit": 1},
+    {"from": "ΑΘΗΝΑ", "to": ["ΧΑΝΙΑ", "ΗΡΑΚΛΕΙΟ", "ΡΟΔΟΣ", "ΚΕΡΚΥΡΑ", "ΣΥΡΟΣ", "ΜΥΤΙΛΗΝΗ"], "days": [4], "transit": 1},
     {"from": "ΘΕΣΣΑΛΟΝΙΚΗ", "to": ["ΣΕΡΡΕΣ", "ΔΡΑΜΑ", "ΚΑΒΑΛΑ", "ΞΑΝΘΗ", "ΚΟΜΟΤΗΝΗ", "ΑΛΕΞΑΝΔΡΟΥΠΟΛΗ"], "days": [1, 4], "transit": 0},
     {"from": "ΘΕΣΣΑΛΟΝΙΚΗ", "to": ["ΒΕΡΟΙΑ", "ΚΟΖΑΝΗ", "ΓΡΕΒΕΝΑ", "ΙΩΑΝΝΙΝΑ"], "days": [0], "transit": 0},
     {"from": "ΣΕΡΡΕΣ", "to": ["ΘΕΣΣΑΛΟΝΙΚΗ"], "days": [0, 1], "transit": 0},
     {"from": "ΙΩΑΝΝΙΝΑ", "to": ["ΑΡΤΑ", "ΑΓΡΙΝΙΟ", "ΠΑΤΡΑ", "ΑΙΓΙΟ", "ΚΟΡΙΝΘΟΣ", "ΑΘΗΝΑ"], "days": [1], "transit": 0},
-    {"from": "ΠΑΤΡΑ", "to": ["ΑΘΗΝΑ", "ΚΟΡΙΝΘΟΣ", "ΑΙΓΙΟ"], "days": [0], "transit": 0},
+    {"from": "ΠΑΤΡΑ", "to": ["ΑΘΗΝΑ", "ΚΟΡΙΝΘΟΣ"], "days": [0], "transit": 0},
     {"from": "ΛΑΡΙΣΑ", "to": ["ΒΟΛΟΣ", "ΛΑΜΙΑ", "ΑΘΗΝΑ"], "days": [0, 3], "transit": 0},
     {"from": "ΑΜΦΙΣΣΑ", "to": ["ΛΑΜΙΑ"], "days": [0, 1, 3, 4], "transit": 0},
     {"from": "ΛΑΜΙΑ", "to": ["ΑΜΦΙΣΣΑ", "ΔΟΜΟΚΟΣ"], "days": [0, 1, 2, 3, 4], "transit": 0},
-    {"from": "ΓΡΕΒΕΝΑ", "to": ["ΤΡΙΚΑΛΑ", "ΛΑΜΙΑ", "ΑΘΗΝΑ"], "days": [3], "transit": 0},
     # ΕΠΙΣΤΡΟΦΕΣ
     {"from": ["ΘΕΣΣΑΛΟΝΙΚΗ", "ΛΑΡΙΣΑ", "ΛΑΜΙΑ"], "to": ["ΑΘΗΝΑ"], "days": [1, 4], "transit": 0},
-    {"from": ["ΚΑΛΑΜΑΤΑ", "ΤΡΙΠΟΛΗ", "ΝΑΥΠΛΙΟ"], "to": ["ΑΘΗΝΑ"], "days": [3], "transit": 0},
-    {"from": ["ΑΛΕΞΑΝΔΡΟΥΠΟΛΗ", "ΣΕΡΡΕΣ"], "to": ["ΘΕΣΣΑΛΟΝΙΚΗ"], "days": [2, 5], "transit": 0},
+    {"from": ["ΚΑΛΑΜΑΤΑ", "ΤΡΙΠΟΛΗ"], "to": ["ΑΘΗΝΑ"], "days": [3], "transit": 0},
+    {"from": ["ΑΛΕΞΑΝΔΡΟΥΠΟΛΗ", "ΞΑΝΘΗ", "ΣΕΡΡΕΣ"], "to": ["ΘΕΣΣΑΛΟΝΙΚΗ"], "days": [2, 5], "transit": 0},
 ]
 
 # Χάρτης Πόλεων (Mapping to Hubs)
 HUB_MAP = {
     "ΑΜΦΙΣΣΑ": "ΛΑΜΙΑ", "ΔΟΜΟΚΟΣ": "ΛΑΜΙΑ", "ΚΑΡΠΕΝΗΣΙ": "ΛΑΜΙΑ", 
     "ΘΗΒΑ": "ΕΛΑΙΩΝΑΣ", "ΛΙΒΑΔΕΙΑ": "ΕΛΑΙΩΝΑΣ", "ΧΑΛΚΙΔΑ": "ΕΛΑΙΩΝΑΣ",
-    "ΣΠΑΡΤΗ": "ΤΡΙΠΟΛΗ", "ΠΥΡΓΟΣ": "ΠΑΤΡΑ", "ΑΜΑΛΙΑΔΑ": "ΠΑΤΡΑ", "ΑΡΓΟΣ": "ΝΑΥΠΛΙΟ",
+    "ΣΠΑΡΤΗ": "ΤΡΙΠΟΛΗ", "ΠΥΡΓΟΣ": "ΠΑΤΡΑ", "ΑΡΓΟΣ": "ΝΑΥΠΛΙΟ",
     "ΒΟΛΟΣ": "ΛΑΡΙΣΑ", "ΚΑΡΔΙΤΣΑ": "ΤΡΙΚΑΛΑ", "ΠΡΕΒΕΖΑ": "ΑΡΤΑ", "ΗΓΟΥΜΕΝΙΤΣΑ": "ΙΩΑΝΝΙΝΑ",
     "ΜΕΣΟΛΟΓΓΙ": "ΑΓΡΙΝΙΟ", "ΕΔΕΣΣΑ": "ΒΕΡΟΙΑ", "ΦΛΩΡΙΝΑ": "ΚΟΖΑΝΗ", "ΚΑΣΤΟΡΙΑ": "ΚΟΖΑΝΗ",
-    "ΚΙΛΚΙΣ": "ΘΕΣΣΑΛΟΝΙΚΗ", "ΠΟΛΥΓΥΡΟΣ": "ΘΕΣΣΑΛΟΝΙΚΗ", "ΓΙΑΝΝΙΤΣΑ": "ΘΕΣΣΑΛΟΝΙΚΗ",
-    "ΡΕΘΥΜΝΟ": "ΚΡΗΤΗ", "ΛΑΣΙΘΙ": "ΚΡΗΤΗ", "ΑΓΙΟΣ ΝΙΚΟΛΑΟΣ": "ΚΡΗΤΗ"
+    "ΚΙΛΚΙΣ": "ΘΕΣΣΑΛΟΝΙΚΗ", "ΠΟΛΥΓΥΡΟΣ": "ΘΕΣΣΑΛΟΝΙΚΗ", "ΓΙΑΝΝΙΤΣΑ": "ΘΕΣΣΑΛΟΝΙΚΗ"
 }
 
 ROUTES = []
@@ -150,31 +157,29 @@ def find_path(start, end, deadline, mode='backward', visited=None):
         return best
 
 # --- UI ---
-st.markdown('<div class="main-title">Μεταγωγές</div>', unsafe_allow_html=True)
-
 with st.container():
     c1, c2, c3 = st.columns(3)
     origin = c1.selectbox("📍 Αφετηρία:", ALL_CITIES, index=ALL_CITIES.index("ΣΕΡΡΕΣ"))
     dest = c2.selectbox("🏁 Προορισμός:", ALL_CITIES, index=ALL_CITIES.index("ΑΘΗΝΑ"))
     d_date = c3.date_input("📅 Παράδοση:", datetime.now() + timedelta(days=5))
 
-if st.button("🚀 Υπολογισμός"):
+if st.button("🚀 Υπολογισμός Δρομολογίου"):
     res = find_path(origin.upper(), dest.upper(), d_date, 'backward')
     if res:
         st.session_state.update({'res': res, 'd': dest, 'o': origin, 'dt': d_date})
-        st.markdown(f"### 🗓️ Πρέπει να ξεκινήσει: {format_dt(res[0]['ship'])}", unsafe_allow_html=True)
+        st.markdown(f"<h3 style='color:white;'>🗓️ Πρέπει να ξεκινήσει: {format_dt(res[0]['ship'])}</h3>", unsafe_allow_html=True)
         for i, leg in enumerate(res):
-            st.markdown(f"""<div class="route-card"><div style="font-weight:bold; font-size:1.3em; color:#004a99;">🚌 Σκέλος {i+1}: {leg['from']} ➡️ {leg['to']}</div>
+            st.markdown(f"""<div class="route-card"><div style="font-weight:bold; font-size:1.3em; color:#0056b3;">🚌 Σκέλος {i+1}: {leg['from']} ➡️ {leg['to']}</div>
             <div><span class="label-blue">Αναχώρηση:</span> {format_dt(leg['ship'])} | <span class="label-blue">Άφιξη:</span> {format_dt(leg['arrive'])}</div></div>""", unsafe_allow_html=True)
     else: st.error("Δεν βρέθηκε διαδρομή.")
 
 if 'res' in st.session_state:
-    if st.button(f"🔄 Επιστροφή"):
+    if st.button(f"🔄 Επιστροφή ({st.session_state['d']} ➡️ {st.session_state['o']})"):
         ret = find_path(st.session_state['d'].upper(), st.session_state['o'].upper(), st.session_state['dt'] + timedelta(days=1), 'forward')
         if ret:
-            st.markdown(f"### 🗓️ Επιστροφή στην έδρα: {format_dt(ret[-1]['arrive'])}", unsafe_allow_html=True)
+            st.markdown(f"<h3 style='color:white;'>🗓️ Επιστροφή στην έδρα: {format_dt(ret[-1]['arrive'])}</h3>", unsafe_allow_html=True)
             for i, leg in enumerate(ret):
-                st.markdown(f"""<div class="return-card"><div style="font-weight:bold; font-size:1.3em; color:#e67e22;">🔄 Σκέλος {i+1}: {leg['from']} ➡️ {leg['to']}</div>
+                st.markdown(f"""<div class="return-card"><div style="font-weight:bold; font-size:1.3em; color:#cc5500;">🔄 Σκέλος {i+1}: {leg['from']} ➡️ {leg['to']}</div>
                 <div><span class="label-blue">Αναχώρηση:</span> {format_dt(leg['ship'])} | <span class="label-blue">Άφιξη:</span> {format_dt(leg['arrive'])}</div></div>""", unsafe_allow_html=True)
 
 # by Manos

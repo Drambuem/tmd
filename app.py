@@ -123,4 +123,38 @@ col1, col2, col3 = st.columns(3)
 with col1:
     # ΠΡΟΕΠΙΛΟΓΗ: ΣΕΡΡΕΣ
     default_origin = "ΣΕΡΡΕΣ" if "ΣΕΡΡΕΣ" in ALL_CITIES else ALL_CITIES[0]
-    origin = st.selectbox("Από (Αφετηρία):", ALL
+    origin = st.selectbox("Από (Αφετηρία):", ALL_CITIES, index=ALL_CITIES.index(default_origin))
+with col2:
+    # ΠΡΟΕΠΙΛΟΓΗ: ΑΘΗΝΑ
+    default_dest = "ΑΘΗΝΑ" if "ΑΘΗΝΑ" in ALL_CITIES else ALL_CITIES[0]
+    dest = st.selectbox("Προς (Προορισμός):", ALL_CITIES, index=ALL_CITIES.index(default_dest))
+with col3:
+    d_date = st.date_input("Ημερομηνία Παράδοσης στον Πελάτη:", datetime.now() + timedelta(days=5))
+
+if st.button("🔍 Υπολογισμός Διαδρομής"):
+    res = find_backward_path(origin.upper(), dest.upper(), d_date)
+    if res:
+        st.session_state['last_res'] = res
+        st.session_state['last_dest'] = dest
+        st.session_state['last_origin'] = origin
+        st.session_state['last_delivery'] = d_date
+        
+        st.success(f"### Αναχώρηση από {origin}: {res[0]['ship'].strftime('%d/%m/%Y')} ({greek_day(res[0]['ship'])})")
+        for i, leg in enumerate(res):
+            with st.expander(f"Σκέλος {i+1}: {leg['from']} ➡️ {leg['to']}", expanded=True):
+                c_a, c_b = st.columns(2)
+                c_a.write(f"**Αναχώρηση:** {leg['ship'].strftime('%d/%m/%Y')} ({greek_day(leg['ship'])})")
+                c_b.write(f"**Άφιξη:** {leg['arrive'].strftime('%d/%m/%Y')} ({greek_day(leg['arrive'])})")
+        
+        st.warning(f"📦 **Άφιξη στον τελικό προορισμό:** {res[-1]['arrive'].strftime('%d/%m/%Y')} | **Παράδοση:** {d_date.strftime('%d/%m/%Y')}")
+    else:
+        st.error("Δεν βρέθηκε διαδρομή. Δοκιμάστε μια μεταγενέστερη ημερομηνία παράδοσης.")
+
+if 'last_res' in st.session_state:
+    st.write("---")
+    if st.button(f"🔄 Υπολογισμός Επιστροφής ({st.session_state['last_dest']} ➡️ {st.session_state['last_origin']})"):
+        ret_start = st.session_state['last_delivery'] + timedelta(days=1)
+        ret_res = find_forward_path(st.session_state['last_dest'].upper(), st.session_state['last_origin'].upper(), ret_start)
+        
+        if ret_res:
+            st.success(f"### Επιστροφή στην έδρα ({st.session_state['last_origin']}): {ret_res[-1]['arr

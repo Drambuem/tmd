@@ -58,4 +58,69 @@ def greek_day(date):
     return days[date.weekday()]
 
 # --- ΜΗΧΑΝΗ BACKWARD (ΓΙΑ ΑΝΑΧΩΡΗΣΗ) ---
-def find_backward_path(start, end, deadline
+def find_backward_path(start, end, deadline, depth=0):
+    if depth > 4: return None
+    target_arrival = deadline - timedelta(days=1)
+    best_path = None
+
+    for r in ROUTES:
+        if r["to"] == end:
+            ship = target_arrival - timedelta(days=r["transit"])
+            # Πηγαίνουμε πίσω μέχρι να βρούμε μέρα δρομολογίου
+            tries = 0
+            while ship.weekday() not in r["days"] and tries < 14:
+                ship -= timedelta(days=1)
+                tries += 1
+            
+            arrive = ship + timedelta(days=r["transit"])
+            current_leg = {"from": r["from"], "to": r["to"], "ship": ship, "arrive": arrive}
+            
+            if r["from"] == start:
+                path = [current_leg]
+            else:
+                # Ανταπόκριση: Πρέπει να έχει φτάσει τουλάχιστον 1 μέρα ΠΡΙΝ το ship
+                path_prefix = find_backward_path(start, r["from"], ship, depth + 1)
+                path = path_prefix + [current_leg] if path_prefix else None
+            
+            if path:
+                # Επιλέγουμε τη διαδρομή που ξεκινάει όσο το δυνατόν αργότερα
+                if best_path is None or path[0]["ship"] > best_path[0]["ship"]:
+                    best_path = path
+    return best_path
+
+# --- ΜΗΧΑΝΗ FORWARD (ΓΙΑ ΕΠΙΣΤΡΟΦΗ) ---
+def find_forward_path(start, end, start_date, depth=0):
+    if depth > 4: return None
+    best_path = None
+
+    for r in ROUTES:
+        if r["from"] == start:
+            ship = start_date
+            tries = 0
+            while ship.weekday() not in r["days"] and tries < 14:
+                ship += timedelta(days=1)
+                tries += 1
+            
+            arrive = ship + timedelta(days=r["transit"])
+            current_leg = {"from": r["from"], "to": r["to"], "ship": ship, "arrive": arrive}
+            
+            if r["to"] == end:
+                path = [current_leg]
+            else:
+                # Ανταπόκριση: Φεύγει τουλάχιστον 1 μέρα ΜΕΤΑ την άφιξη
+                path_suffix = find_forward_path(r["to"], end, arrive + timedelta(days=1), depth + 1)
+                path = [current_leg] + path_suffix if path_suffix else None
+            
+            if path:
+                if best_path is None or path[-1]["arrive"] < best_path[-1]["arrive"]:
+                    best_path = path
+    return best_path
+
+# --- UI ---
+st.title("🚛 Logistics Planner PRO v1.6")
+
+col1, col2, col3 = st.columns(3)
+with col1:
+    # ΠΡΟΕΠΙΛΟΓΗ: ΣΕΡΡΕΣ
+    default_origin = "ΣΕΡΡΕΣ" if "ΣΕΡΡΕΣ" in ALL_CITIES else ALL_CITIES[0]
+    origin = st.selectbox("Από (Αφετηρία):", ALL

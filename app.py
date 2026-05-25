@@ -28,7 +28,6 @@ st.markdown("""
         font-size: 26px !important; 
         color: #ffffff !important;
         font-weight: 900 !important;
-        font-family: sans-serif;
         z-index: 9999;
         text-shadow: 1px 1px 3px #000;
     }
@@ -106,88 +105,107 @@ def greek_day(date):
 def format_dt(date):
     return f"<b>{date.strftime('%d/%m/%Y')}</b> <span class='date-red'>({greek_day(date)})</span>"
 
-# --- ΜΗΧΑΝΗ ΑΝΑΖΗΤΗΣΗΣ (BFS - ΟΧΙ ΑΝΑΔΡΟΜΗ) ---
-def iterative_find_path(start, end, start_date, mode='backward'):
-    # Στο backward το start_date είναι το deadline. Στο forward είναι η ημερομηνία έναρξης.
-    queue = collections.deque([(start, start_date, [])])
-    visited = {}
-    best_path = None
+# --- ΔΙΟΡΘΩΜΕΝΟΣ ΑΛΓΟΡΙΘΜΟΣ BFS (ΣΩΣΤΗ ΚΑΤΕΥΘΥΝΣΗ) ---
+def find_path_fixed(start_node, end_node, target_date, mode='backward'):
+    if mode == 'backward':
+        # Ξεκινάμε από τον προορισμό και ψάχνουμε προς τα πίσω μέχρι την αφετηρία
+        # Η ουρά περιέχει: (Τρέχουσα πόλη, Ημερομηνία που πρέπει να έχει φτάσει, Μονοπάτι)
+        queue = collections.deque([(HUB_MAP.get(end_node, end_node), target_date, [])])
+        best_path = None
+        visited = {}
 
-    while queue:
-        curr_city, curr_date, path = queue.popleft()
-        
-        # Αν φτάσαμε στον προορισμό
-        if curr_city == end:
-            if mode == 'backward':
-                if best_path is None or path[0]['ship'] > best_path[0]['ship']:
-                    best_path = path
-            else:
-                if best_path is None or path[-1]['arrive'] < best_path[-1]['arrive']:
-                    best_path = path
-            continue
-
-        # Αποφυγή ατέρμονων βρόχων (μέγιστο 5 στάσεις)
-        if len(path) > 5: continue
-
-        actual_end = HUB_MAP.get(curr_city, curr_city) if mode == 'forward' else curr_city
-        
-        for r in ROUTES:
-            # Στο backward ψάχνουμε ποιος πάει στην curr_city
-            if mode == 'backward' and r["to"] == (HUB_MAP.get(curr_city, curr_city)):
-                ship = (curr_date - timedelta(days=1)) - timedelta(days=r["transit"])
-                while ship.weekday() not in r["days"]: ship -= timedelta(days=1)
-                arrive = ship + timedelta(days=r["transit"])
-                
-                # Έλεγχος αν έχουμε ήδη βρει καλύτερη ημερομηνία για αυτή την πόλη
-                if r["from"] not in visited or ship > visited[r["from"]]:
-                    visited[r["from"]] = ship
-                    queue.append((r["from"], ship, [{"from": r["from"], "to": r["to"], "ship": ship, "arrive": arrive}] + path))
+        while queue:
+            curr_city, curr_date, current_path = queue.popleft()
             
-            # Στο forward ψάχνουμε πού πάει η curr_city
-            elif mode == 'forward' and r["from"] == actual_end:
-                ship = curr_date
-                while ship.weekday() not in r["days"]: ship += timedelta(days=1)
-                arrive = ship + timedelta(days=r["transit"])
-                
-                if r["to"] not in visited or arrive < visited[r["to"]]:
-                    visited[r["to"]] = arrive
-                    queue.append((r["to"], arrive + timedelta(days=1), path + [{"from": r["from"], "to": r["to"], "ship": ship, "arrive": arrive}]))
+            if curr_city == start_node:
+                if best_path is None or current_path[0]['ship'] > best_path[0]['ship']:
+                    best_path = current_path
+                continue
 
-    return best_path
+            if len(current_path) > 5: continue
+
+            for r in ROUTES:
+                if r["to"] == curr_city:
+                    # Πότε πρέπει να φύγει το φορτηγό για να φτάσει πριν την curr_date;
+                    ship_limit = curr_date - timedelta(days=1)
+                    ship = ship_limit - timedelta(days=r["transit"])
+                    while ship.weekday() not in r["days"]: ship -= timedelta(days=1)
+                    arrive = ship + timedelta(days=r["transit"])
+
+                    if r["from"] not in visited or ship > visited[r["from"]]:
+                        visited[r["from"]] = ship
+                        new_leg = {"from": r["from"], "to": r["to"], "ship": ship, "arrive": arrive}
+                        queue.append((r["from"], ship, [new_leg] + current_path))
+        
+        # Αν ο τελικός προορισμός ήταν Hub, πρόσθεσε το τοπικό σκέλος στο τέλος
+        if best_path and end_node in HUB_MAP:
+            hub = HUB_MAP[end_node]
+            last_arrive = best_path[-1]['arrive']
+            best_path.append({"from": hub, "to": end_node, "ship": last_arrive, "arrive": last_arrive})
+        return best_path
+
+    else: # FORWARD MODE (Επιστροφή)
+        queue = collections.deque([(HUB_MAP.get(start_node, start_node), target_date, [])])
+        best_path = None
+        visited = {}
+
+        while queue:
+            curr_city, curr_date, current_path = queue.popleft()
+
+            if curr_city == end_node:
+                if best_path is None or current_path[-1]['arrive'] < best_path[-1]['arrive']:
+                    best_path = current_path
+                continue
+
+            if len(current_path) > 5: continue
+
+            for r in ROUTES:
+                if r["from"] == curr_city:
+                    ship = curr_date
+                    while ship.weekday() not in r["days"]: ship += timedelta(days=1)
+                    arrive = ship + timedelta(days=r["transit"])
+
+                    if r["to"] not in visited or arrive < visited[r["to"]]:
+                        visited[r["to"]] = arrive
+                        new_leg = {"from": r["from"], "to": r["to"], "ship": ship, "arrive": arrive}
+                        queue.append((r["to"], arrive + timedelta(days=1), current_path + [new_leg]))
+        return best_path
 
 # --- UI ---
 c1, c2, c3 = st.columns(3)
-origin = c1.selectbox("📍 Αφετηρία:", ALL_CITIES, index=ALL_CITIES.index("ΣΕΡΡΕΣ"))
-dest = c2.selectbox("🏁 Προορισμός:", ALL_CITIES, index=ALL_CITIES.index("ΑΘΗΝΑ"))
-d_date = c3.date_input("📅 Παράδοση:", datetime.now() + timedelta(days=5))
+origin = c1.selectbox("📍 Αφετηρία (Πού είστε):", ALL_CITIES, index=ALL_CITIES.index("ΣΕΡΡΕΣ"))
+dest = c2.selectbox("🏁 Προορισμός (Πού πάει):", ALL_CITIES, index=ALL_CITIES.index("ΑΘΗΝΑ"))
+d_date = c3.date_input("📅 Ημερομηνία Παράδοσης στον Πελάτη:", datetime.now() + timedelta(days=5))
 
 if st.button("🚀 Υπολογισμός Δρομολογίου"):
-    res = iterative_find_path(origin.upper(), dest.upper(), d_date, 'backward')
+    res = find_path_fixed(origin.upper(), dest.upper(), d_date, 'backward')
     if res:
         st.session_state['res'] = res
         st.session_state['o'] = origin
         st.session_state['d'] = dest
         st.session_state['dt'] = d_date
         st.session_state['ret'] = None
-    else: st.error("Δεν βρέθηκε διαδρομή.")
+    else:
+        st.error("Δεν βρέθηκε διαδρομή.")
 
 if 'res' in st.session_state and st.session_state['res']:
-    st.markdown(f"<h3 style='color:white;'>🗓️ Πρέπει να ξεκινήσει: {format_dt(st.session_state['res'][0]['ship'])}</h3>", unsafe_allow_html=True)
+    st.markdown(f"<h3 style='color:white;'>🗓️ Πρέπει να ξεκινήσει από {st.session_state['o']}: {format_dt(st.session_state['res'][0]['ship'])}</h3>", unsafe_allow_html=True)
     for i, leg in enumerate(st.session_state['res']):
-        st.markdown(f"""<div class="route-card"><div style="font-weight:bold; font-size:1.2em; color:#0056b3;">🚌 Σκέλος {i+1}: {leg['from']} ➡️ {leg['to']}</div>
+        st.markdown(f"""<div class="route-card"><div style="font-weight:bold; font-size:1.3em; color:#0056b3;">🚌 Σκέλος {i+1}: {leg['from']} ➡️ {leg['to']}</div>
         <div><span class="label-blue">Αναχώρηση:</span> {format_dt(leg['ship'])} | <span class="label-blue">Άφιξη:</span> {format_dt(leg['arrive'])}</div></div>""", unsafe_allow_html=True)
     
     if st.button(f"🔄 Υπολογισμός Επιστροφής"):
         with st.spinner('Υπολογισμός...'):
-            ret_path = iterative_find_path(st.session_state['d'].upper(), st.session_state['o'].upper(), st.session_state['dt'] + timedelta(days=1), 'forward')
+            # Επιστροφή από τον Προορισμό στην Αφετηρία, από την επόμενη μέρα της παράδοσης
+            ret_path = find_path_fixed(st.session_state['d'].upper(), st.session_state['o'].upper(), st.session_state['dt'] + timedelta(days=1), 'forward')
             st.session_state['ret'] = ret_path
             if not ret_path: st.error("Δεν βρέθηκε διαδρομή επιστροφής.")
 
 if 'ret' in st.session_state and st.session_state['ret']:
     st.markdown("<hr>", unsafe_allow_html=True)
-    st.markdown(f"<h3 style='color:white;'>🗓️ Επιστροφή στην έδρα: {format_dt(st.session_state['ret'][-1]['arrive'])}</h3>", unsafe_allow_html=True)
+    st.markdown(f"<h3 style='color:white;'>🗓️ Επιστροφή στην έδρα ({st.session_state['o']}): {format_dt(st.session_state['ret'][-1]['arrive'])}</h3>", unsafe_allow_html=True)
     for i, leg in enumerate(st.session_state['ret']):
-        st.markdown(f"""<div class="return-card"><div style="font-weight:bold; font-size:1.2em; color:#cc5500;">🔄 Σκέλος {i+1}: {leg['from']} ➡️ {leg['to']}</div>
+        st.markdown(f"""<div class="return-card"><div style="font-weight:bold; font-size:1.3em; color:#cc5500;">🔄 Σκέλος {i+1}: {leg['from']} ➡️ {leg['to']}</div>
         <div><span class="label-blue">Αναχώρηση:</span> {format_dt(leg['ship'])} | <span class="label-blue">Άφιξη:</span> {format_dt(leg['arrive'])}</div></div>""", unsafe_allow_html=True)
 
 # by Manos
